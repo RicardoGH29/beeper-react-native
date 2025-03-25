@@ -23,13 +23,15 @@ import {
   LearnMoreLinks,
   ReloadInstructions,
 } from 'react-native/Libraries/NewAppScreen';
+import { NativeModules } from 'react-native';
+const { NotificationModule } = NativeModules;
 
 type SectionProps = PropsWithChildren<{
   title: string;
 }>;
 
 function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+    const isDarkMode = useColorScheme() === 'dark';
   return (
     <View style={styles.sectionContainer}>
       <Text
@@ -71,6 +73,16 @@ function App(): React.JSX.Element {
    * https://github.com/react-native-community/discussions-and-proposals/discussions/827
    */
   const safePadding = '5%';
+
+    NotificationModule.checkNotificationServiceStatus()
+        .then((isEnabled) => {
+            console.log('Notification service is enabled:', isEnabled);
+            if (!isEnabled) {
+                // Open settings if not enabled
+                NotificationModule.openNotificationSettings();
+            }
+        })
+        .catch(error => console.error(error));
 
   return (
     <View style={backgroundStyle}>
