@@ -13,6 +13,8 @@ import androidx.annotation.RequiresPermission
 import com.beeper_react_native.utils.bluethoot_functions.bluetoothGatt
 import com.beeper_react_native.utils.bluethoot_functions.isGattConnected
 import android.Manifest
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.util.UUID
 
 object BluetoothConnectionManager {
@@ -21,6 +23,19 @@ object BluetoothConnectionManager {
     private const val KEY_CONNECTED_DEVICE_NAME = "connectedDeviceName"
     private const val KEY_IS_CONNECTED = "isConnected"
     private val TAG = "BluetoothConnectionManager"
+
+    private var reactContext: ReactApplicationContext? = null
+
+    fun setReactContext(context: ReactApplicationContext) {
+        reactContext = context
+    }
+
+    private fun sendConnectionEvent(isConnected: Boolean) {
+        reactContext?.let { context ->
+            context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                .emit("onBluetoothConnectionChanged", isConnected)
+        }
+    }
 
     // Añadir al BluetoothConnectionManager.kt
     fun connectToDevice(context: Context, deviceAddress: String): Boolean {
@@ -51,10 +66,12 @@ object BluetoothConnectionManager {
 
                     // Descubrir servicios
                     gatt.discoverServices()
+                    sendConnectionEvent(true)
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     Log.d(TAG, "Desconectado de GATT server")
                     isGattConnected = false
                     bluetoothGatt = null
+                    sendConnectionEvent(false)
                     clearConnectedDevice(context)
                 }
             }
@@ -101,6 +118,7 @@ object BluetoothConnectionManager {
 
             // Actualizar las preferencias
             clearConnectedDevice(context)
+            sendConnectionEvent(false)
             return true
         } catch (e: Exception) {
             Log.e(TAG, "Error al desconectar: ${e.message}")
