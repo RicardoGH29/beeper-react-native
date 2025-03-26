@@ -13,6 +13,7 @@ import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import com.beeper_react_native.utils.AppsSelectedManager
+import com.beeper_react_native.utils.BluetoothConnectionManager
 import com.beeper_react_native.utils.bluethoot_functions.sendDataToDevice
 
 data class NotificationData(
@@ -49,9 +50,8 @@ class NotificationService : NotificationListenerService() {
 
         val selectedApps = selectedManager.getAllSelectedApps()
 
-        Log.d(TAG, "onNotificationPosted: $selectedApps")
-
-//        if (selectedApps.contains(appName)) {
+        // Check if we have an active Bluetooth connection
+        if (BluetoothConnectionManager.isConnected(this)) {
             val notificationData = NotificationData(appName, title, text)
 
             // Serializar con formato: <typeMessage>|<app>|<title>|<text>
@@ -60,7 +60,9 @@ class NotificationService : NotificationListenerService() {
             // Enviar datos al dispositivo ESP
             val context = this
             sendDataToDevice(context, dataToSend).onClick(null)
-
+        } else {
+            Log.d(TAG, "No Bluetooth device connected, skipping notification")
+        }
     }
 
 

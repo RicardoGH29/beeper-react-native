@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import {BleManager, Device} from 'react-native-ble-plx';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NativeModules } from 'react-native';
+const { BluetoothConnectionModule } = NativeModules;
 
 interface DeviceItemProps {
   item: Device;
@@ -19,7 +21,6 @@ interface DeviceItemProps {
 
 const BluetoothApp: React.FC = () => {
   const [isConnected, setIsConnected] = useState<boolean>(false);
-  const [connectedDevice, setConnectedDevice] = useState<Device | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
   const [bleManager] = useState<BleManager>(new BleManager());
 
@@ -48,7 +49,7 @@ const BluetoothApp: React.FC = () => {
       try {
         // Verificar si ya hemos mostrado la configuración de notificaciones
         const hasShownSettings = await AsyncStorage.getItem('hasShownNotificationSettings');
-        
+
         // Verificar si ya tenemos el permiso para enviar notificaciones
         const isPostGranted = await PermissionsAndroid.check(
           PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
@@ -66,11 +67,11 @@ const BluetoothApp: React.FC = () => {
 
         // Solo abrimos la configuración si no lo hemos hecho antes
         if (!hasShownSettings) {
+          // Guardamos que ya mostramos la configuración
+          await AsyncStorage.setItem('hasShownNotificationSettings', 'true');
           await Linking.sendIntent(
             'android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS',
           );
-          // Guardamos que ya mostramos la configuración
-          await AsyncStorage.setItem('hasShownNotificationSettings', 'true');
         }
 
         return true;
@@ -120,10 +121,15 @@ const BluetoothApp: React.FC = () => {
   // Conectar a un dispositivo
   const connectToDevice = async (device: Device): Promise<void> => {
     try {
-      const connectedDevice = await bleManager.connectToDevice(device.id);
-      setConnectedDevice(connectedDevice);
       setIsConnected(true);
       bleManager.stopDeviceScan();
+
+      // Save the connection info for the native service
+      BluetoothConnectionModule.saveConnectedDevice(
+          device.id,
+          device.name || 'Unknown Device'
+      );
+      await BluetoothConnectionModule.connectToDevice(device.id);
     } catch (error) {
       console.log('Error conectando:', error);
     }
@@ -131,10 +137,14 @@ const BluetoothApp: React.FC = () => {
 
   // Desconectar dispositivo
   const disconnectDevice = async (): Promise<void> => {
-    if (connectedDevice) {
-      await bleManager.cancelDeviceConnection(connectedDevice.id);
-      setConnectedDevice(null);
+    console.log('Disconnecting device');
+    if (BluetoothConnectionModule.isConnected()) {
+      // Desconectar dispositivo
+      console.log('Connected device');
       setIsConnected(false);
+
+      // Clear connection info
+      BluetoothConnectionModule.clearConnectedDevice();
     }
   };
 
@@ -157,12 +167,28 @@ const BluetoothApp: React.FC = () => {
     };
   }, [bleManager]);
 
+  console.log(BluetoothConnectionModule.isConnected())
+
+  useEffect(() => {
+    if (BluetoothConnectionModule.isConnected()){
+        const now = new Date();
+        const messageSendHour = `time|${now.getHours()}|${now.getMinutes()}|${now.getSeconds()}|${now.getDate()}|${now.getMonth() + 1}|${now.getFullYear()}`;
+        console.log(messageSendHour);
+        BluetoothConnectionModule.sendDataToDevice(messageSendHour);
+        setIsConnected(true);
+    } else {
+        setIsConnected(false);
+    }
+  }, [BluetoothConnectionModule.isConnected()]);
+
+  console.log(AsyncStorage.getItem('hasShownNotificationSettings'));
+
   return (
     <View style={styles.container}>
       {isConnected ? (
         <View style={styles.connectionStatus}>
           <Text style={styles.connectedText}>
-            Conectado a: {connectedDevice?.name || 'Dispositivo'}
+            Conectado a: {BluetoothConnectionModule.getConnectedDevice() || 'Dispositivo'}
           </Text>
           <Button title="Desconectar" onPress={disconnectDevice} color="red" />
         </View>
