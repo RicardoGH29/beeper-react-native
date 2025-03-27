@@ -19,6 +19,21 @@ class AppsSelectedModule(reactContext: ReactApplicationContext) : ReactContextBa
     }
 
     @ReactMethod
+    fun getAllApps(systemApps: Boolean, promise: Promise) {
+        val apps = appsSelectedManager.getInstalledApps(systemApps)
+        val array = Arguments.createArray()
+        apps.forEach { app ->
+            val map = Arguments.createMap()
+            map.putString("packageName", app.packageName)
+            map.putString("appName", app.appName)
+            map.putBoolean("isSystemApp", app.isSystemApp)
+            map.putString("image", app.image.toString())
+            array.pushMap(map)
+        }
+        promise.resolve(array)
+    }
+
+    @ReactMethod
     fun isAppSelected(packageName: String, promise: Promise) {
         try {
             val isSelected = appsSelectedManager.isAppSelected(packageName)

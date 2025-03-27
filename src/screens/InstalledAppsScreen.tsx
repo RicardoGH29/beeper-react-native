@@ -1,26 +1,33 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  TouchableOpacity,
-  Platform,
   ActivityIndicator,
   Alert,
+  FlatList,
+  Image,
+  NativeModules,
+  PermissionsAndroid,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import InstalledApps from 'react-native-installed-apps';
-import { PermissionsAndroid } from 'react-native';
+
+const {AppsSelectedModule} = NativeModules;
 
 interface AppInfo {
   appName: string;
   packageName: string;
   versionName?: string;
+  icon?: string; // Base64 encoded string
 }
 
 const InstalledAppsScreen: React.FC = () => {
+  const [allApps, setAllApps] = useState<AppInfo[]>([]);
   const [apps, setApps] = useState<AppInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
 
   const requestQueryAllPackagesPermission = async (): Promise<boolean> => {
     if (Platform.OS === 'android' && Platform.Version >= 30) {
@@ -44,36 +51,82 @@ const InstalledAppsScreen: React.FC = () => {
         if (!hasPermission) {
           Alert.alert(
             'Permiso requerido',
-            'Se necesita permiso para ver las aplicaciones instaladas. Por favor, habilita el permiso en la configuración.',
+            'Se necesita permiso para ver las aplicaciones instaladas.',
           );
           setLoading(false);
           return;
         }
-        const installedApps = await InstalledApps.getApps();
-        setApps(installedApps);
+
+        // Get the response from native module
+        const installedApps = await AppsSelectedModule.getAllApps(false);
+        console.log('Processed apps array:', installedApps);
+
+        // Update state with the processed array
+        setAllApps(
+          installedApps
+            .map(
+              (pkg: {
+                appName: any;
+                packageName: any;
+                versionName: any;
+                image: any;
+              }) => ({
+                appName: pkg.appName || pkg.packageName,
+                packageName: pkg.packageName,
+                versionName: pkg.versionName,
+                icon: pkg.image,
+              }),
+            )
+            .sort((a: {appName: string}, b: {appName: any}) =>
+              a.appName.localeCompare(b.appName),
+            ),
+        );
       } else {
-        // Para iOS, por ahora mostraremos un mensaje
-        setApps([]);
+        setAllApps([]);
       }
     } catch (error) {
       console.error('Error al cargar las aplicaciones:', error);
       Alert.alert(
         'Error',
-        'No se pudieron cargar las aplicaciones instaladas. Por favor, intenta de nuevo.',
+        'No se pudieron cargar las aplicaciones instaladas.',
       );
     } finally {
       setLoading(false);
     }
   }, []);
 
+  function selectApp(packageName: string) {
+    console.log('Selected app:', packageName);
+  }
+
   useEffect(() => {
-    loadInstalledApps();
+    console.log('InstalledAppsScreen');
+    loadInstalledApps().then();
   }, [loadInstalledApps]);
 
-  const renderAppItem = ({ item }: { item: AppInfo }) => (
-    <TouchableOpacity style={styles.appItem}>
+  useEffect(() => {
+    if (search) {
+      setApps(
+        allApps.filter(app =>
+          app.appName.toLowerCase().includes(search.toLowerCase()),
+        ),
+      );
+    } else {
+      setApps(allApps);
+    }
+  }, [allApps, search]);
+
+  const renderAppItem = ({item}: {item: AppInfo}) => (
+    <TouchableOpacity style={styles.appItem} onPress={() => selectApp(item.packageName)}>
       <View style={styles.appIconContainer}>
-        <Text style={styles.appIconText}>{item.appName[0]}</Text>
+        {item.icon ? (
+          <Image
+            source={{uri: `data:image/png;base64,${item.icon}`}}
+            style={styles.appIcon}
+          />
+        ) : (
+          <Text style={styles.appIconText}>{item.appName[0]}</Text>
+        )}
       </View>
       <View style={styles.appInfo}>
         <Text style={styles.appName}>{item.appName}</Text>
@@ -96,10 +149,17 @@ const InstalledAppsScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      <TextInput
+        style={styles.searchInput}
+        onChangeText={setSearch}
+        value={search}
+        placeholder="Buscar aplicaciones..."
+        placeholderTextColor="#999999"  // Add this line to change placeholder color
+      />
       <FlatList
         data={apps}
         renderItem={renderAppItem}
-        keyExtractor={(item) => item.packageName}
+        keyExtractor={item => item.packageName}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
@@ -144,7 +204,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: {width: 0, height: 2},
         shadowOpacity: 0.1,
         shadowRadius: 4,
       },
@@ -196,6 +256,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666666',
   },
+  appIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  searchInput: {
+    height: 40,
+    borderColor: 'gray',
+    borderWidth: 1,
+    margin: 10,
+    color: '#000000',
+  },
 });
 
-export default InstalledAppsScreen; 
+export default InstalledAppsScreen;
